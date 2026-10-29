@@ -829,6 +829,11 @@ getAllMonitors = async (ddcciMethod = "default", coreOnly = false) => {
             const monitor = featuresList[hwid2]
             const { features, id, hwid, vcpCodes, path, ddcciSupported, highLevelSupported, featureScanTimedOut } = monitor
             const canUseHighLevelBrightness = !settings.disableHighLevel && highLevelSupported?.brightness
+            // A malformed capability report (e.g. a Realtek RTK1600 USB-C bridge)
+            // makes checkIfVCPSupported() reject every brightness VCP without
+            // probing, even though the high-level API still reads and writes
+            // brightness. Fall back to the standard luminance VCP in that case
+            // instead of hiding the display.
             // A timed-out DDC scan must not trigger another DDC probe. Use the
             // standard luminance VCP as the high-level API's placeholder so
             // downstream feature and display-type handling remains valid.
@@ -838,7 +843,7 @@ getAllMonitors = async (ddcciMethod = "default", coreOnly = false) => {
                 : featureScanTimedOut
                     ? (canUseHighLevelBrightness ? 0x10 : false)
                     : (ddcciSupported || ddcBrightnessVCPs?.[hwid?.[1]]
-                        ? await determineBrightnessVCPCode(id)
+                        ? ((await determineBrightnessVCPCode(id)) || (canUseHighLevelBrightness ? 0x10 : false))
                         // DDC/CI validation already failed for this display (e.g. an
                         // internal panel), so probing brightness VCPs only produces
                         // device errors. Fall back to the high-level placeholder.
